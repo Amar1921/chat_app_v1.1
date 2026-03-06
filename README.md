@@ -204,3 +204,8 @@ DEEPSEEK_API_URL=https://api.deepseek.com/v1
 # CORS
 FRONTEND_URL=http://localhost:3000
 ```
+![Firefox_Screenshot_2026-03-06T19-40-17 892Z](https://github.com/user-attachments/assets/76283e44-c276-4e0d-91c4-30aa954ff5bc)
+![Capture d’écran 2026-03-06 à 20 41 14](https://github.com/user-attachments/assets/18ca8893-304d-4977-b8d4-4af5d6c3b3c3)
+![Capture d’écran 2026-03-06 à 20 39 24](https://github.com/user-attachments/assets/c7906b57-c313-42db-bf5f-d2ace72da1ad)
+
+
