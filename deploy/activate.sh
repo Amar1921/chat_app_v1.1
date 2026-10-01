@@ -25,10 +25,18 @@ node --input-type=module - <<'JS'
 import fs from 'node:fs';
 import dotenv from 'dotenv';
 const file='.env.production';
-const env=dotenv.parse(fs.readFileSync(fs.existsSync(file)?file:'.env'));
-env.NODE_ENV='production';
-env.FRONTEND_URL='https://chat.amarsyll.pro';
-fs.writeFileSync(file,Object.entries(env).filter(([k])=>!k.startsWith('VITE_')).map(([k,v])=>k+'='+JSON.stringify(v)).join('\n')+'\n',{mode:0o600});
+const original=fs.readFileSync(fs.existsSync(file)?file:'.env','utf8');
+const before=dotenv.parse(original);
+let updated=original.replace(/^VITE_.*$/gm,'# Variable frontend déplacée vers la configuration Vite.');
+for(const [key,value] of Object.entries({NODE_ENV:'production',FRONTEND_URL:'https://chat.amarsyll.pro'})) {
+  const pattern=new RegExp('^'+key+'=.*$','gm');
+  updated=pattern.test(updated)?updated.replace(pattern,key+'='+value):updated+'\n'+key+'='+value+'\n';
+}
+const after=dotenv.parse(updated);
+for(const key of ['DB_PASSWORD','JWT_SECRET','JWT_REFRESH_SECRET','DEEPSEEK_API_KEY']) {
+  if(before[key]!==after[key])throw Error('La migration doit préserver '+key);
+}
+fs.writeFileSync(file,updated,{mode:0o600});
 fs.chmodSync(file,0o600);
 JS
 rsync -a "$release/backend/" "$app/backend/"

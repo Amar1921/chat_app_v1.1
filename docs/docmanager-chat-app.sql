@@ -204,7 +204,7 @@ export default pool;
     ProxyPreserveHost On
     ProxyPass /api http://127.0.0.1:5001/api
     ProxyPassReverse /api http://127.0.0.1:5001/api
-   
+
     # ── SSL Configuration ────────────────────────────────────
     SSLEngine on
     Include /etc/letsencrypt/options-ssl-apache.conf
@@ -214,16 +214,16 @@ export default pool;
     &lt;Location /api/chat&gt;
         ProxyPass http://127.0.0.1:5001/api/chat
         ProxyPassReverse http://127.0.0.1:5001/api/chat
-        
+
         # Désactiver la mise en mémoire tampon pour le streaming
         SetEnv proxy-sendchunks 1
         SetEnv proxy-nokeepalive 1
-        
+
         # Headers pour forcer le streaming
         Header always set X-Accel-Buffering &quot;no&quot;
         Header always set Cache-Control &quot;no-cache&quot;
         Header always set Connection &quot;keep-alive&quot;
-        
+
         # Configuration supplémentaire pour le streaming
         RewriteEngine On
         RewriteCond %{HTTP:Upgrade} =websocket [NC]
@@ -231,7 +231,7 @@ export default pool;
     &lt;/Location&gt;
 
     # ── WebSocket Support (si nécessaire) ────────────────────
-  
+
 
     # ── Logs ──────────────────────────────────────────────────
     ErrorLog ${APACHE_LOG_DIR}/chat.amarsyll.pro-error.log
@@ -275,10 +275,18 @@ node --input-type=module - &lt;&lt;&#x27;JS&#x27;
 import fs from &#x27;node:fs&#x27;;
 import dotenv from &#x27;dotenv&#x27;;
 const file=&#x27;.env.production&#x27;;
-const env=dotenv.parse(fs.readFileSync(fs.existsSync(file)?file:&#x27;.env&#x27;));
-env.NODE_ENV=&#x27;production&#x27;;
-env.FRONTEND_URL=&#x27;https://chat.amarsyll.pro&#x27;;
-fs.writeFileSync(file,Object.entries(env).filter(([k])=&gt;!k.startsWith(&#x27;VITE_&#x27;)).map(([k,v])=&gt;k+&#x27;=&#x27;+JSON.stringify(v)).join(&#x27;\\n&#x27;)+&#x27;\\n&#x27;,{mode:0o600});
+const original=fs.readFileSync(fs.existsSync(file)?file:&#x27;.env&#x27;,&#x27;utf8&#x27;);
+const before=dotenv.parse(original);
+let updated=original.replace(/^VITE_.*$/gm,&#x27;# Variable frontend déplacée vers la configuration Vite.&#x27;);
+for(const [key,value] of Object.entries({NODE_ENV:&#x27;production&#x27;,FRONTEND_URL:&#x27;https://chat.amarsyll.pro&#x27;})) {
+  const pattern=new RegExp(&#x27;^&#x27;+key+&#x27;=.*$&#x27;,&#x27;gm&#x27;);
+  updated=pattern.test(updated)?updated.replace(pattern,key+&#x27;=&#x27;+value):updated+&#x27;\\n&#x27;+key+&#x27;=&#x27;+value+&#x27;\\n&#x27;;
+}
+const after=dotenv.parse(updated);
+for(const key of [&#x27;DB_PASSWORD&#x27;,&#x27;JWT_SECRET&#x27;,&#x27;JWT_REFRESH_SECRET&#x27;,&#x27;DEEPSEEK_API_KEY&#x27;]) {
+  if(before[key]!==after[key])throw Error(&#x27;La migration doit préserver &#x27;+key);
+}
+fs.writeFileSync(file,updated,{mode:0o600});
 fs.chmodSync(file,0o600);
 JS
 rsync -a &quot;$release/backend/&quot; &quot;$app/backend/&quot;
