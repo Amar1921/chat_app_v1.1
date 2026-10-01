@@ -148,13 +148,14 @@ function StreamingBubble({ content }) {
             lineHeight: 1.7,
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
-            '& p': { m: 0 },
+            '& p': { mt: 0, mb: 1 },
+            '& pre': { whiteSpace: 'pre', overflowX: 'auto' },
         }}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
                     ...mdComponents,
-                    p: ({ children }) => <span>{children}</span>,
+                    p: ({ children }) => <p>{children}</p>,
                 }}
             >
                 {content}
@@ -187,6 +188,8 @@ function FinishedBubble({ content }) {
     return (
         <Box sx={{
             color: 'text.primary',
+            overflowWrap: 'anywhere',
+            '& pre': { whiteSpace: 'pre', overflowX: 'auto' },
             '& p':            { mt: 0, mb: 1, lineHeight: 1.7 },
             '& p:last-child': { mb: 0 },
             '& h1,h2,h3,h4':  { color: 'text.primary', mt: 1.5, mb: 1, fontWeight: 600 },
@@ -311,6 +314,12 @@ const Message = memo(function Message({ message, isStreaming }) {
                         <FinishedBubble content={message.content} />
                     )}
                 </Box>
+
+                {!isUser && message.interrupted && (
+                    <Typography variant="caption" sx={{ color: 'warning.main', display: 'block', mt: 1 }}>
+                        Réponse interrompue — le texte reçu a été conservé.
+                    </Typography>
+                )}
 
                 {/* Hover actions */}
                 {!isStreaming && (

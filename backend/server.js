@@ -1,25 +1,24 @@
+import { environment } from './config/env.js';
+import { readFileSync } from 'node:fs';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 import { testConnection } from './models/db.js';
 import authRoutes from './routes/auth.js';
 import conversationsRoutes from './routes/conversations.js';
 import chatRoutes from './routes/chat.js';
 import statsRoutes from './routes/stats.js';
 
-// Load environment variables
-dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 5001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 // ==================== CONFIGURATION ====================
 const config = {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: process.env.FRONTEND_URL,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
@@ -83,7 +82,8 @@ app.get('/api/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: NODE_ENV,
-    version: process.env.npm_package_version || '1.0.0',
+    version: VERSION,
+    revision: process.env.DEPLOY_REVISION || null,
     uptime: process.uptime(),
   });
 });
@@ -162,6 +162,7 @@ async function startServer() {
       console.log(`🚀 Server is running!`);
       console.log('='.repeat(50));
       console.log(`📍 Environment: ${NODE_ENV}`);
+      console.log(`📄 Configuration: ${environment.path} (variables du service prioritaires)`);
       console.log(`📍 Port: ${PORT}`);
       console.log(`📍 Frontend URL: ${config.cors.origin}`);
       console.log(`📍 Health check: http://localhost:${PORT}/api/health`);

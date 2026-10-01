@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Exécuté sur le VPS avec le chemin du paquet déjà transféré et sa révision Git.
+release=${1:?Chemin de la release requis}
+revision=${2:?Révision Git requise}
+app=/var/www/chat
+backup="$app/backups/$(date -u +%Y%m%dT%H%M%SZ)-$revision"
+mkdir -p "$backup"
+chmod 700 "$app/backups" "$backup"
+tar -C "$app" --exclude=backend/node_modules -czf "$backup/application.tar.gz" backend frontend/dist
+chmod 600 "$backup/application.tar.gz"
+if [[ -f "$app/package.json" ]]; then cp "$app/package.json" "$backup/package.json"; fi
+rollback() {
+  trap - ERR
+  echo "Échec : restauration de la version précédente."
+  tar -C "$app" -xzf "$backup/application.tar.gz"
+  if [[ -f "$backup/package.json" ]]; then cp "$backup/package.json" "$app/package.json"; fi
+  NODE_ENV=production pm2 restart chat-backend --update-env >/dev/null
+  exit 1
+}
+trap rollback ERR
+# Migrer les valeurs du serveur sur place ; aucun secret ne transite vers le Mac.
+cd "$app/backend"
+node --input-type=module - <<'JS'
+import fs from 'node:fs';
+import dotenv from 'dotenv';
+const file='.env.production';
+const env=dotenv.parse(fs.readFileSync(fs.existsSync(file)?file:'.env'));
+env.NODE_ENV='production';
+env.FRONTEND_URL='https://chat.amarsyll.pro';
+fs.writeFileSync(file,Object.entries(env).filter(([k])=>!k.startsWith('VITE_')).map(([k,v])=>k+'='+JSON.stringify(v)).join('\n')+'\n',{mode:0o600});
+fs.chmodSync(file,0o600);
+JS
+rsync -a "$release/backend/" "$app/backend/"
+cp "$release/package.json" "$app/package.json"
+# Vérifier avant le redémarrage que la configuration de production se charge.
+NODE_ENV=production node --input-type=module -e "await import('./config/env.js'); console.log('Configuration production validée')"
+NODE_ENV=production DEPLOY_REVISION="$revision" pm2 restart chat-backend --update-env >/dev/null
+for attempt in {1..15}; do
+  if curl --fail --silent http://127.0.0.1:5001/api/health > "$backup/health.json"; then break; fi
+  sleep 1
+done
+node --input-type=module - "$backup/health.json" "$revision" <<'JS'
+import fs from 'node:fs';
+const health=JSON.parse(fs.readFileSync(process.argv[2]));
+if(health.status!=='ok'||health.version!=='1.1.0'||health.revision!==process.argv[3])throw Error('La nouvelle version ne répond pas correctement');
+console.log(JSON.stringify(health));
+JS
+# Remplacer index.html après la copie des nouveaux assets ; conserver les anciens
+# assets pour les onglets déjà ouverts, jusqu'à un nettoyage de maintenance.
+rsync -a --exclude=index.html "$release/dist/" "$app/frontend/dist/"
+cp "$release/dist/index.html" "$app/frontend/dist/index.html"
+pm2 save >/dev/null
+trap - ERR
+echo "Déploiement réussi ; sauvegarde : $backup"

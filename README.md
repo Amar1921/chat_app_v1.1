@@ -51,55 +51,36 @@ Une application de chat IA moderne et complète utilisant l'API DeepSeek, avec R
 
 ---
 
-## 🚀 Installation
+## 🚀 Installation et environnements
 
-### Prérequis
-- Node.js 18+
-- MySQL 8+
-- Clé API DeepSeek ([deepseek.com](https://platform.deepseek.com))
-
-### 1. Base de données MySQL
-
-```sql
--- Connectez-vous à MySQL et exécutez:
-mysql -u root -p < backend/schema.sql
-```
-
-### 2. Backend
+Node.js compatible Vite 7 (20.19+ ou 22.12+) et MySQL 8+.
 
 ```bash
-cd backend
-
-# Installer les dépendances
-npm install
-
-# Configurer l'environnement
-cp .env .env
-# Éditez .env avec vos valeurs :
-#   DB_PASSWORD=votre_mot_de_passe_mysql
-#   DEEPSEEK_API_KEY=sk-votre_clé_deepseek
-#   JWT_SECRET=une_clé_aléatoire_longue
-
-# Démarrer le serveur
-npm run dev   # développement
-npm start     # production
+yarn install --frozen-lockfile
+# Base neuve uniquement : adapter le nom de base et l’utilisateur.
+mysql -u UTILISATEUR -p < backend/schema.sql
 ```
 
-Le serveur démarre sur `http://localhost:5001`
+Configuration frontend : `.env.development` et `.env.production` à la racine, sans secrets.
+Configuration backend : `backend/.env.development` et `backend/.env.production`, privés et ignorés par Git.
+Sur une nouvelle installation, les créer depuis les fichiers `.example` du backend.
 
-### 3. Frontend
+Développement, dans deux terminaux :
 
 ```bash
-cd frontend
-
-# Installer les dépendances
-npm install
-
-# Démarrer en développement
-npm start
+npm run dev:server   # backend local : port 5002
+npm run dev          # frontend local : port 5173
 ```
 
-L'app s'ouvre sur `http://localhost:3000`
+Production, après configuration de `backend/.env.production` :
+
+```bash
+npm run build        # frontend dist/, API du même domaine via /api
+npm run start:server # backend en mode production : port 5001
+```
+
+[Guide complet des fichiers, priorités et redémarrages](docs/environnements.md).
+L’ancien `.env` a été sauvegardé dans `.env.legacy` et n’est plus utilisé par ces commandes.
 
 ---
 
@@ -182,28 +163,9 @@ deepseek-chat/
 
 ## 📦 Variables d'environnement
 
-```env
-# Server
-PORT=5001
+Les exemples sans secrets sont dans `backend/.env.development.example` et `backend/.env.production.example`.
+Les clés DeepSeek, JWT et MySQL restent exclusivement côté backend. Les variables VITE_* sont publiques et incorporées à la compilation du frontend.
 
-# MySQL
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=votre_mdp
-DB_NAME=deepseek_chat
-
-# JWT
-JWT_SECRET=clé_secrète_très_longue
-JWT_EXPIRES_IN=7d
-
-# DeepSeek API
-DEEPSEEK_API_KEY=sk-xxxxxxxxxxxx
-DEEPSEEK_API_URL=https://api.deepseek.com/v1
-
-# CORS
-FRONTEND_URL=http://localhost:3000
-```
 ![Firefox_Screenshot_2026-03-06T19-40-17 892Z](https://github.com/user-attachments/assets/76283e44-c276-4e0d-91c4-30aa954ff5bc)
 ![Capture d’écran 2026-03-06 à 20 41 14](https://github.com/user-attachments/assets/18ca8893-304d-4977-b8d4-4af5d6c3b3c3)
 ![Capture d’écran 2026-03-06 à 20 39 24](https://github.com/user-attachments/assets/c7906b57-c313-42db-bf5f-d2ace72da1ad)

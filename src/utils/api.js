@@ -1,7 +1,10 @@
 import axios from 'axios';
+import { consumeChatStream } from './chatStream.js';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/api',
+  baseURL: API_BASE_URL,
   timeout: 30000
 });
 
@@ -107,7 +110,7 @@ export const chatAPI = {
 
       // ✅ FIX: REACT_APP_API_URL = "https://chat.amarsyll.pro/api"
       // On retire le /api final pour éviter /api/api/chat/...
-      const apiRoot = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5001/api';
+      const apiRoot = API_BASE_URL;
       const baseURL = apiRoot.replace(/\/api\/?$/, ''); // → "https://chat.amarsyll.pro"
 
       const response = await fetch(`${baseURL}/api/chat/${conversationId}`, {
@@ -123,46 +126,14 @@ export const chatAPI = {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || `HTTP error! status: ${response.status}`);
+        throw new Error(error.error || error.message || `HTTP error! status: ${response.status}`);
       }
 
       if (!response.body) {
         throw new Error('ReadableStream not supported');
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') { onDone?.(); continue; }
-            if (data) {
-              try {
-                const parsed = JSON.parse(data);
-                switch (parsed.type) {
-                  case 'content':   onChunk?.(parsed.content);     break;
-                  case 'reasoning': onReasoning?.(parsed.content); break;
-                  case 'done':      onDone?.(parsed);              break;
-                  case 'error':     onError?.(parsed.error);       break;
-                  default: console.log('Unknown event type:', parsed);
-                }
-              } catch (e) {
-                console.error('Error parsing SSE data:', e, 'Raw data:', data);
-              }
-            }
-          }
-        }
-      }
+      await consumeChatStream(response.body, { onChunk, onReasoning, onDone });
     } catch (error) {
       if (error.name === 'AbortError') {
         onError?.('AbortError');

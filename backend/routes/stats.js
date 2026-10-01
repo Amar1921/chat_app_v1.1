@@ -399,8 +399,8 @@ router.post('/folders', authenticate, async (req, res) => {
     );
 
     const folder = await queryOne(
-        'SELECT * FROM folders WHERE id = ?',
-        [id]
+        'SELECT * FROM folders WHERE id = ? AND user_id = ?',
+        [id, req.user.id]
     );
 
     res.status(201).json({ folder });
@@ -450,10 +450,11 @@ router.put('/folders/:id', authenticate, async (req, res) => {
     );
 
     const folder = await queryOne(
-        'SELECT * FROM folders WHERE id = ?',
-        [id]
+        'SELECT * FROM folders WHERE id = ? AND user_id = ?',
+        [id, req.user.id]
     );
 
+    if (!folder) return res.status(404).json({ error: 'Dossier non trouvé' });
     res.json({ folder });
   } catch (err) {
     console.error('Update folder error:', err);

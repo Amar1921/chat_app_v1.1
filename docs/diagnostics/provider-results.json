@@ -1,0 +1,16 @@
+[
+  {
+    "test": "provider-json",
+    "finish": "stop",
+    "exact": true,
+    "containsContinuez": true,
+    "length": 217
+  },
+  {
+    "test": "provider-stream",
+    "finish": "stop",
+    "exact": true,
+    "containsContinuez": true,
+    "length": 217
+  }
+]

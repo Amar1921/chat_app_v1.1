@@ -1,27 +1,11 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
+import { authenticate } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
 import pool from '../models/db.js';
 
 const router = express.Router();
 
-// Middleware d'authentification
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ error: 'Token manquant' });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ error: 'Token invalide' });
-    }
-    req.user = user;
-    next();
-  });
-};
+const authenticateToken = authenticate;
 
 // OPTIONS handler
 router.options('*', (req, res) => {
@@ -261,11 +245,12 @@ router.put('/:id', authenticateToken, async (req, res, next) => {
     }
 
     const [updated] = await pool.query(
-        'SELECT * FROM conversations WHERE id = ?',
-        [id]
+        'SELECT * FROM conversations WHERE id = ? AND user_id = ?',
+        [id, req.user.id]
     );
 
     const conv = updated[0];
+    if (!conv) return res.status(404).json({ error: 'Conversation non trouvée' });
     conv.temperature = parseFloat(conv.temperature);
     conv.top_p = parseFloat(conv.top_p);
     conv.presence_penalty = parseFloat(conv.presence_penalty);
@@ -294,11 +279,12 @@ router.post('/:id/archive', authenticateToken, async (req, res, next) => {
     }
 
     const [updated] = await pool.query(
-        'SELECT * FROM conversations WHERE id = ?',
-        [id]
+        'SELECT * FROM conversations WHERE id = ? AND user_id = ?',
+        [id, req.user.id]
     );
 
     const conv = updated[0];
+    if (!conv) return res.status(404).json({ error: 'Conversation non trouvée' });
     conv.temperature = parseFloat(conv.temperature);
     conv.top_p = parseFloat(conv.top_p);
     conv.presence_penalty = parseFloat(conv.presence_penalty);
@@ -327,11 +313,12 @@ router.post('/:id/unarchive', authenticateToken, async (req, res, next) => {
     }
 
     const [updated] = await pool.query(
-        'SELECT * FROM conversations WHERE id = ?',
-        [id]
+        'SELECT * FROM conversations WHERE id = ? AND user_id = ?',
+        [id, req.user.id]
     );
 
     const conv = updated[0];
+    if (!conv) return res.status(404).json({ error: 'Conversation non trouvée' });
     conv.temperature = parseFloat(conv.temperature);
     conv.top_p = parseFloat(conv.top_p);
     conv.presence_penalty = parseFloat(conv.presence_penalty);
@@ -411,6 +398,8 @@ router.get('/:id/export', authenticateToken, async (req, res, next) => {
 router.get('/:id/stats', authenticateToken, async (req, res, next) => {
   try {
     const { id } = req.params;
+    const [owned] = await pool.query('SELECT id FROM conversations WHERE id = ? AND user_id = ?', [id, req.user.id]);
+    if (!owned.length) return res.status(404).json({ error: 'Conversation non trouvée' });
 
     const [statsRows] = await pool.query(
         `SELECT 
@@ -565,11 +554,12 @@ router.post('/:id/apply-template', authenticateToken, async (req, res, next) => 
     );
 
     const [updated] = await pool.query(
-        'SELECT * FROM conversations WHERE id = ?',
-        [id]
+        'SELECT * FROM conversations WHERE id = ? AND user_id = ?',
+        [id, req.user.id]
     );
 
     const conv = updated[0];
+    if (!conv) return res.status(404).json({ error: 'Conversation non trouvée' });
     conv.temperature = parseFloat(conv.temperature);
     conv.top_p = parseFloat(conv.top_p);
     conv.presence_penalty = parseFloat(conv.presence_penalty);

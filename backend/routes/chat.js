@@ -1,6 +1,7 @@
 import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
+import { createSseDecoder } from '../utils/sse.js';
 import { query, queryOne } from '../models/db.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -40,7 +41,7 @@ router.post('/:conversationId', authenticate, async (req, res) => {
   const { conversationId } = req.params;
   const { content, stream = true } = req.body;
 
-  if (!content?.trim()) {
+  if (typeof content !== 'string' || !content.trim() || content.length > 32000) {
     return res.status(400).json({ error: 'Message vide' });
   }
 
@@ -90,7 +91,7 @@ router.post('/:conversationId', authenticate, async (req, res) => {
     if (stream) {
       // Configuration correcte des headers SSE
       res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
+        'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache, no-transform',
         'Connection': 'keep-alive',
         'X-Accel-Buffering': 'no', // Désactive le buffering Nginx
@@ -98,7 +99,7 @@ router.post('/:conversationId', authenticate, async (req, res) => {
 
       // Fonction utilitaire pour envoyer des événements SSE correctement formatés
       const sendEvent = (data) => {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        if (!res.destroyed && !res.writableEnded) res.write(`data: ${JSON.stringify(data)}\n\n`);
       };
 
       const deepseekResponse = await axios.post(
@@ -112,6 +113,7 @@ router.post('/:conversationId', authenticate, async (req, res) => {
             presence_penalty: parseFloat(conversation.presence_penalty) || 0,
             frequency_penalty: parseFloat(conversation.frequency_penalty) || 0,
             stream: true,
+            stream_options: { include_usage: true },
           },
           {
             headers: {
@@ -128,13 +130,13 @@ router.post('/:conversationId', authenticate, async (req, res) => {
       let finishReason = null;
       let promptTokens = 0;
       let completionTokens = 0;
+      let receivedDone = false;
+      let streamFailed = false;
 
-      deepseekResponse.data.on('data', (chunk) => {
-        const lines = chunk.toString().split('\n');
-        for (const line of lines) {
+      const sseDecoder = createSseDecoder((line) => {
           if (line.startsWith('data: ')) {
             const data = line.slice(6).trim();
-            if (data === '[DONE]') continue;
+            if (data === '[DONE]') { receivedDone = true; return; }
 
             try {
               const parsed = JSON.parse(data);
@@ -159,13 +161,21 @@ router.post('/:conversationId', authenticate, async (req, res) => {
                 completionTokens = parsed.usage.completion_tokens || 0;
               }
             } catch (e) {
-              console.error('Erreur parsing JSON:', e);
+              streamFailed = true;
+              console.error('Événement DeepSeek invalide:', e.message);
             }
           }
-        }
       });
+      deepseekResponse.data.on('data', (chunk) => sseDecoder.write(chunk));
 
       deepseekResponse.data.on('end', async () => {
+        try {
+        sseDecoder.end();
+        if (streamFailed || !receivedDone) {
+          sendEvent({ type: 'error', error: 'Réponse DeepSeek interrompue ou illisible. Le texte reçu a été conservé.' });
+          res.end();
+          return;
+        }
         const generationTime = Date.now() - startTime;
         const totalTokens = promptTokens + completionTokens;
 
@@ -219,6 +229,8 @@ router.post('/:conversationId', authenticate, async (req, res) => {
           type: 'done',
           message_id: asstMsgId,
           user_message_id: userMsgId,
+          content: fullContent,
+          reasoning_content: reasoningContent,
           tokens: {
             prompt: promptTokens,
             completion: completionTokens,
@@ -230,16 +242,22 @@ router.post('/:conversationId', authenticate, async (req, res) => {
         });
 
         res.end();
+        } catch (err) {
+          console.error('Erreur de finalisation du chat:', err.message);
+          sendEvent({ type: 'error', error: 'Impossible de confirmer la réponse. Le texte reçu a été conservé.' });
+          res.end();
+        }
       });
 
       deepseekResponse.data.on('error', (err) => {
         console.error('Erreur stream DeepSeek:', err);
-        sendEvent({ type: 'error', error: err.message });
+        streamFailed = true;
+        sendEvent({ type: 'error', error: 'La connexion DeepSeek a été interrompue.' });
         res.end();
       });
 
       // Gestion de la fermeture de connexion par le client
-      req.on('close', () => {
+      res.on('close', () => {
         deepseekResponse.data.destroy();
       });
 

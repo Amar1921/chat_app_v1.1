@@ -134,6 +134,8 @@ export default function ChatPage({ conversationId, onConversationUpdate }) {
                   if (m.id === streamId) return {
                     ...m,
                     id:                 done.message_id,
+                    content:            typeof done.content === 'string' ? done.content : m.content,
+                    reasoning_content:  typeof done.reasoning_content === 'string' ? done.reasoning_content : m.reasoning_content,
                     tokens_used:        done.tokens?.total || 0,
                     prompt_tokens:      done.tokens?.prompt || 0,
                     completion_tokens:  done.tokens?.completion || 0,
@@ -143,6 +145,9 @@ export default function ChatPage({ conversationId, onConversationUpdate }) {
                   return m;
                 })
             );
+            if (done.finish_reason === 'length') {
+              enqueueSnackbar('Réponse écourtée : limite de tokens atteinte. Vous pouvez demander la suite.', { variant: 'warning' });
+            }
             if (done.new_title) {
               setConversation(prev => ({ ...prev, title: done.new_title }));
               onConversationUpdate?.(conversationId, { title: done.new_title });
@@ -156,7 +161,7 @@ export default function ChatPage({ conversationId, onConversationUpdate }) {
             abortControllerRef.current = null;
             streamingMsgIdRef.current  = null;
             setStreaming(false);
-            setMessages(prev => prev.filter(m => m.id !== streamId));
+            setMessages(prev => prev.map(m => m.id === streamId ? { ...m, interrupted: true } : m));
             enqueueSnackbar(`Erreur: ${error}`, { variant: 'error' });
           }
       );
@@ -165,7 +170,7 @@ export default function ChatPage({ conversationId, onConversationUpdate }) {
       abortControllerRef.current = null;
       streamingMsgIdRef.current  = null;
       setStreaming(false);
-      setMessages(prev => prev.filter(m => m.id !== streamId));
+      setMessages(prev => prev.map(m => m.id === streamId ? { ...m, interrupted: true } : m));
       enqueueSnackbar('Erreur de connexion', { variant: 'error' });
     }
   }, [input, streaming, conversationId]);
