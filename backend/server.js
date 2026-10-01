@@ -11,6 +11,7 @@ import chatRoutes from './routes/chat.js';
 import statsRoutes from './routes/stats.js';
 
 const app = express();
+app.set('trust proxy', process.env.NODE_ENV === 'production' ? 'loopback' : false);
 const PORT = process.env.PORT || 5001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;

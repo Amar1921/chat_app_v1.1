@@ -265,7 +265,8 @@ rollback() {
   echo &quot;Échec : restauration de la version précédente.&quot;
   tar -C &quot;$app&quot; -xzf &quot;$backup/application.tar.gz&quot;
   if [[ -f &quot;$backup/package.json&quot; ]]; then cp &quot;$backup/package.json&quot; &quot;$app/package.json&quot;; fi
-  NODE_ENV=production pm2 restart chat-backend --update-env &gt;/dev/null
+  pm2 delete chat-backend &gt;/dev/null
+  NODE_ENV=production pm2 start &quot;$app/backend/server.js&quot; --name chat-backend --cwd &quot;$app/backend&quot; &gt;/dev/null
   exit 1
 }
 trap rollback ERR
@@ -293,7 +294,14 @@ rsync -a &quot;$release/backend/&quot; &quot;$app/backend/&quot;
 cp &quot;$release/package.json&quot; &quot;$app/package.json&quot;
 # Vérifier avant le redémarrage que la configuration de production se charge.
 NODE_ENV=production node --input-type=module -e &quot;await import(&#x27;./config/env.js&#x27;); console.log(&#x27;Configuration production validée&#x27;)&quot;
-NODE_ENV=production DEPLOY_REVISION=&quot;$revision&quot; pm2 restart chat-backend --update-env &gt;/dev/null
+node --input-type=module - &quot;$app&quot; &quot;$revision&quot; &lt;&lt;&#x27;JS&#x27;
+import fs from &#x27;node:fs&#x27;;
+const app=process.argv[2],revision=process.argv[3];
+const config={apps:[{name:&#x27;chat-backend&#x27;,script:app+&#x27;/backend/start.js&#x27;,args:&#x27;production&#x27;,cwd:app,env:{NODE_ENV:&#x27;production&#x27;,DEPLOY_REVISION:revision}}]};
+fs.writeFileSync(app+&#x27;/ecosystem.config.json&#x27;,JSON.stringify(config,null,2)+&#x27;\\n&#x27;);
+JS
+pm2 delete chat-backend &gt;/dev/null
+pm2 start &quot;$app/ecosystem.config.json&quot; --only chat-backend &gt;/dev/null
 for attempt in {1..15}; do
   if curl --fail --silent http://127.0.0.1:5001/api/health &gt; &quot;$backup/health.json&quot;; then break; fi
   sleep 1
@@ -350,7 +358,7 @@ npm run build
 npm run start:server
 ```
 
-Servir `dist/` et acheminer `/api` vers Express avec le proxy existant. Les variables VITE_* sont incorporées au frontend pendant la compilation : modifier le fichier puis reconstruire et redéployer dist/. Le backend lit sa configuration au démarrage : le redémarrer après modification. Sur le VPS actuel : processus PM2 `chat-backend`, backend `/var/www/chat/backend`, racine Apache `/var/www/chat/frontend/dist`, proxy `/api` vers `127.0.0.1:5001`. Le VirtualHost constaté est conservé dans `deploy/apache-vhost.reference.conf` ; il ne doit pas être réinstallé sans vérification. `deploy/activate.sh` active un paquet préparé, sauvegarde l’application, migre les secrets existants sur place, contrôle la santé et restaure la sauvegarde en cas d’échec.
+Servir `dist/` et acheminer `/api` vers Express avec le proxy existant. Les variables VITE_* sont incorporées au frontend pendant la compilation : modifier le fichier puis reconstruire et redéployer dist/. Le backend lit sa configuration au démarrage : le redémarrer après modification. Sur le VPS actuel : processus PM2 `chat-backend` déclaré dans `/var/www/chat/ecosystem.config.json` (lance `backend/start.js production`), backend `/var/www/chat/backend`, racine Apache `/var/www/chat/frontend/dist`, proxy `/api` vers `127.0.0.1:5001`. Le VirtualHost constaté est conservé dans `deploy/apache-vhost.reference.conf` ; il ne doit pas être réinstallé sans vérification. `deploy/activate.sh` active un paquet préparé, sauvegarde l’application, migre les secrets existants sur place, contrôle la santé et restaure la sauvegarde en cas d’échec.
 
 ## Priorité et sécurité des fichiers
 
@@ -430,6 +438,8 @@ Documentation officielle consultée le 2026-10-01 : https://api-docs.deepseek.co
 ## Vérification sur le VPS avant déploiement
 
 Deux appels réels à DeepSeek (JSON et streaming) ont recopié intégralement les 217 caractères du texte de test, finish_reason=stop. Résultats dans docs/diagnostics/provider-results.json. Backend public avant mise à jour : 1.0.0, actif depuis environ douze jours ; frontend local configuré vers cette API distante avant séparation. PM2 chat-backend exécute /var/www/chat/backend/server.js ; Apache sert /var/www/chat/frontend/dist et proxy /api vers 5001. FRONTEND_URL de production portait un :3000 erroné, corrigé lors de la migration vers backend/.env.production. Version livrée : 1.1.0.
+
+Incident de déploiement : PM2 ne transmettait pas NODE_ENV lors du simple restart --update-env. L’activation a restauré automatiquement l’ancienne version. Correction : déclaration PM2 explicite avec backend/start.js production et révision Git. Express fait confiance uniquement au proxy local en production, pour traiter correctement X-Forwarded-For sans accepter arbitrairement des proxys distants.
 </pre>',
 'backend',
 'active',

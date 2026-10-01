@@ -37,7 +37,7 @@ npm run build
 npm run start:server
 ```
 
-Servir `dist/` et acheminer `/api` vers Express avec le proxy existant. Les variables VITE_* sont incorporées au frontend pendant la compilation : modifier le fichier puis reconstruire et redéployer dist/. Le backend lit sa configuration au démarrage : le redémarrer après modification. Sur le VPS actuel : processus PM2 `chat-backend`, backend `/var/www/chat/backend`, racine Apache `/var/www/chat/frontend/dist`, proxy `/api` vers `127.0.0.1:5001`. Le VirtualHost constaté est conservé dans `deploy/apache-vhost.reference.conf` ; il ne doit pas être réinstallé sans vérification. `deploy/activate.sh` active un paquet préparé, sauvegarde l’application, migre les secrets existants sur place, contrôle la santé et restaure la sauvegarde en cas d’échec.
+Servir `dist/` et acheminer `/api` vers Express avec le proxy existant. Les variables VITE_* sont incorporées au frontend pendant la compilation : modifier le fichier puis reconstruire et redéployer dist/. Le backend lit sa configuration au démarrage : le redémarrer après modification. Sur le VPS actuel : processus PM2 `chat-backend` déclaré dans `/var/www/chat/ecosystem.config.json` (lance `backend/start.js production`), backend `/var/www/chat/backend`, racine Apache `/var/www/chat/frontend/dist`, proxy `/api` vers `127.0.0.1:5001`. Le VirtualHost constaté est conservé dans `deploy/apache-vhost.reference.conf` ; il ne doit pas être réinstallé sans vérification. `deploy/activate.sh` active un paquet préparé, sauvegarde l’application, migre les secrets existants sur place, contrôle la santé et restaure la sauvegarde en cas d’échec.
 
 ## Priorité et sécurité des fichiers
 

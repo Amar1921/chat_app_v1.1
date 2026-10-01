@@ -15,7 +15,8 @@ rollback() {
   echo "Échec : restauration de la version précédente."
   tar -C "$app" -xzf "$backup/application.tar.gz"
   if [[ -f "$backup/package.json" ]]; then cp "$backup/package.json" "$app/package.json"; fi
-  NODE_ENV=production pm2 restart chat-backend --update-env >/dev/null
+  pm2 delete chat-backend >/dev/null
+  NODE_ENV=production pm2 start "$app/backend/server.js" --name chat-backend --cwd "$app/backend" >/dev/null
   exit 1
 }
 trap rollback ERR
@@ -43,7 +44,14 @@ rsync -a "$release/backend/" "$app/backend/"
 cp "$release/package.json" "$app/package.json"
 # Vérifier avant le redémarrage que la configuration de production se charge.
 NODE_ENV=production node --input-type=module -e "await import('./config/env.js'); console.log('Configuration production validée')"
-NODE_ENV=production DEPLOY_REVISION="$revision" pm2 restart chat-backend --update-env >/dev/null
+node --input-type=module - "$app" "$revision" <<'JS'
+import fs from 'node:fs';
+const app=process.argv[2],revision=process.argv[3];
+const config={apps:[{name:'chat-backend',script:app+'/backend/start.js',args:'production',cwd:app,env:{NODE_ENV:'production',DEPLOY_REVISION:revision}}]};
+fs.writeFileSync(app+'/ecosystem.config.json',JSON.stringify(config,null,2)+'\n');
+JS
+pm2 delete chat-backend >/dev/null
+pm2 start "$app/ecosystem.config.json" --only chat-backend >/dev/null
 for attempt in {1..15}; do
   if curl --fail --silent http://127.0.0.1:5001/api/health > "$backup/health.json"; then break; fi
   sleep 1
